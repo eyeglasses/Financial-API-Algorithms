@@ -2,7 +2,7 @@ from yahoo_finance import Share
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from pprint import pprint
-import email
+import email, json
 
 """
 Script to Process Financial API Data  
@@ -14,13 +14,13 @@ with the Yahoo Finance API to convieniently obtain technical market analysis.
 
 
 """
-Core Method (Visual) for each instance of stock pricing analysis
+Core Method (JSON) for each instance of stock pricing analysis
 
 stockAbbrev Stock Exchange abbreviation of company
-historicalDate Target date in RFC822 date format (Given other components)
+historicalDate Target date (RFC822 date format)
 timePeriod Number of days to we back at to grab historic data
 """
-def historicalAnalysis (stockAbbrev,historicalDate, timePeriod):
+def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod):
 	
 	# Import date, then convert to datetime format
 	articleTime = datetime.fromtimestamp(email.utils.mktime_tz(email.utils.parsedate_tz(historicalDate)))
@@ -28,17 +28,20 @@ def historicalAnalysis (stockAbbrev,historicalDate, timePeriod):
 	# Use relativedelta to safely adjust dates
 	historicStart= articleTime - relativedelta (days=+timePeriod)
 
-	# Output the dates and company  we are currently analyzing
-	print (stockAbbrev + ': ' + historicStart.strftime("%Y-%m-%d") + " to " + articleTime.strftime("%Y-%m-%d"))
-
 	# Obtain the market data for that period of time
 	yahooAPITarget = Share(stockAbbrev)
-	# pprint (yahooAPITarget.get_historical(historicStart.strftime("%Y-%m-%d"), articleTime.strftime("%Y-%m-%d")))
 	JSONStockData = yahooAPITarget.get_historical(historicStart.strftime("%Y-%m-%d"), articleTime.strftime("%Y-%m-%d"))
 
-	# Obtain Placement Strength Score and Relative Strength Index
-	print ('Placement Score: ' + str( psScore(JSONStockData,float(JSONStockData[0]['Close']) ) * 100.0) + '%')
-	print ('Relative Strength Index: ' + str( relativeStrengthIndex(JSONStockData,10)) )
+	# Create the JSON array
+	result = {}
+	result['Stock'] = stockAbbrev
+	result['StartDate'] = historicStart.strftime("%Y-%m-%d")
+	result['EndDate'] = articleTime.strftime("%Y-%m-%d")
+	result['psScore'] = psScore(JSONStockData,float(JSONStockData[0]['Close']))
+	result['RSI'] = relativeStrengthIndex(JSONStockData,10)
+
+	return json.dumps(result, indent=4)
+
 
 """
 Placement Strength Score (ps-Score) derived by Karl Brown (thekarlbrown)
@@ -62,6 +65,7 @@ def psScore (historicalJSONData, currentValue):
 		if historicHigh < float(day['High']):
 			historicHigh = float(day['High']) 
 	return (historicHigh + historicLow - 2*currentValue)/(historicHigh - historicLow)
+
 
 """
 Relative Strength Index (RSI): Momentum indicator measuring speed and change of price
@@ -106,6 +110,8 @@ def relativeStrengthIndex (historicalJSONData,timePeriod):
 
 	# Return the RSI
 	return (100.0 - (100.0/(1.0 + (averageGain/averageLoss))))
+
+
 """
 On Balance Volume(OBV): Cumulative volume traded
 http://stockcharts.com/school/doku.php?id=chart_school:technical_indicators:on_balance_volume_obv
@@ -115,6 +121,7 @@ RETURN OBV for historic period
 """
 def onBalanceVolume (histoicalJSONData):
 	return -1
+
 
 """
 Exponential Moving averages: Smooth price data for period of historic time
@@ -127,9 +134,9 @@ RETURN (JSON) EMA's for historic period
 def exponentialMovingAverage (historicalJSONData, timePeriod):
 	return -1
 
-
 # Example markets and times
-historicalAnalysis('IBM','Wed, 17 Jun 2015 09:41:15 -0700',90)
-historicalAnalysis('AAPL','Wed, 1 May 2015 09:41:15 -0500',120)
+print ( historicalAnalysisJSON('IBM','Wed, 17 Jun 2015 09:41:15 -0700',90) )
+print ( historicalAnalysisJSON('AAPL','Wed, 1 May 2015 07:41:15 -0500',120) ) 
+print ( historicalAnalysisJSON('MSFT','Mon, 1 Feb 2013 10:41:15 -0500',100) )
 
 
