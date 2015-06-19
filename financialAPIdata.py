@@ -39,6 +39,7 @@ def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod):
 	result['EndDate'] = articleTime.strftime("%Y-%m-%d")
 	result['psScore'] = psScore(JSONStockData,float(JSONStockData[0]['Close']))
 	result['RSI'] = relativeStrengthIndex(JSONStockData,10)
+	result['OBV'] = onBalanceVolume (JSONStockData)
 
 	return json.dumps(result, indent=4)
 
@@ -64,7 +65,8 @@ def psScore (historicalJSONData, currentValue):
 			historicLow = float(day['Low'])
 		if historicHigh < float(day['High']):
 			historicHigh = float(day['High']) 
-	return (historicHigh + historicLow - 2*currentValue)/(historicHigh - historicLow)
+			
+	return (2*currentValue - historicHigh - historicLow)/(historicHigh - historicLow)
 
 
 """
@@ -91,9 +93,9 @@ def relativeStrengthIndex (historicalJSONData,timePeriod):
 		day+=1	
 
 	# Obtain First true average gain/loss
-	averageGain=averageGain/timePeriodDivisible
-	averageLoss=averageLoss/timePeriodDivisible
-	historicalDataLength= len(historicalJSONData)
+	averageGain = averageGain/timePeriodDivisible
+	averageLoss = averageLoss/timePeriodDivisible
+	historicalDataLength = len(historicalJSONData)
 
 	# Obtain average gain/loss for remainder of time period
 	timePeriodLess = timePeriodDivisible-1.0
@@ -119,9 +121,26 @@ http://stockcharts.com/school/doku.php?id=chart_school:technical_indicators:on_b
 historicalJSONData Historical Data from the Yahoo API in JSON Format
 RETURN OBV for historic period
 """
-def onBalanceVolume (histoicalJSONData):
-	return -1
+def onBalanceVolume (historicalJSONData):
 
+	#Set up initial conditions
+	lastClosing = float(historicalJSONData[0]['Close'])
+	day = 1
+	OBV = 0
+	historicalDataLength = len(historicalJSONData)
+
+	#Loop through remaining days
+	while (day<historicalDataLength):
+		currentClose=float(historicalJSONData[day]['Close'])
+		currentVolume=int(historicalJSONData[day]['Volume'])
+		if (currentClose<lastClosing):
+			OBV=-currentVolume 
+		elif (currentClose>lastClosing):
+			OBV=+currentVolume
+		lastClosing=currentClose
+		day+=1
+
+	return OBV
 
 """
 Exponential Moving averages: Smooth price data for period of historic time
@@ -138,5 +157,5 @@ def exponentialMovingAverage (historicalJSONData, timePeriod):
 print ( historicalAnalysisJSON('IBM','Wed, 17 Jun 2015 09:41:15 -0700',90) )
 print ( historicalAnalysisJSON('AAPL','Wed, 1 May 2015 07:41:15 -0500',120) ) 
 print ( historicalAnalysisJSON('MSFT','Mon, 1 Feb 2013 10:41:15 -0500',100) )
-
+print ( historicalAnalysisJSON('WMT','Wed, 1 May 2015 07:41:15 -0500',45) ) 
 
