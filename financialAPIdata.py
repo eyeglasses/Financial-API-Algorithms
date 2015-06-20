@@ -19,8 +19,10 @@ Core Method (JSON) for each instance of stock pricing analysis
 stockAbbrev Stock Exchange abbreviation of company
 historicalDate Target date (RFC822 date format)
 timePeriod Number of days to we back at to grab historic data
+RSItimePeriod Time period used for RSI calculation
+EMAtimePeriod Time period used for EMA calculation
 """
-def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod):
+def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod, RSItimePeriod,EMAtimePeriod):
 	
 	# Import date, then convert to datetime format
 	articleTime = datetime.fromtimestamp(email.utils.mktime_tz(email.utils.parsedate_tz(historicalDate)))
@@ -32,14 +34,18 @@ def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod):
 	yahooAPITarget = Share(stockAbbrev)
 	JSONStockData = yahooAPITarget.get_historical(historicStart.strftime("%Y-%m-%d"), articleTime.strftime("%Y-%m-%d"))
 
+	#Order from start to finish
+	JSONStockData = list(reversed(JSONStockData))
+
 	# Create the JSON array
 	result = {}
 	result['Stock'] = stockAbbrev
 	result['StartDate'] = historicStart.strftime("%Y-%m-%d")
 	result['EndDate'] = articleTime.strftime("%Y-%m-%d")
-	result['psScore'] = psScore(JSONStockData,float(JSONStockData[0]['Close']))
-	result['RSI'] = relativeStrengthIndex(JSONStockData,10)
+	result['psScore'] = psScore(JSONStockData,float(JSONStockData[len(JSONStockData)-1]['Close']))
+	result['RSI'] = relativeStrengthIndex(JSONStockData,RSItimePeriod)
 	result['OBV'] = onBalanceVolume (JSONStockData)
+	result['EMA'] = exponentialMovingAverage(JSONStockData,10)
 
 	return json.dumps(result, indent=4)
 
@@ -65,7 +71,7 @@ def psScore (historicalJSONData, currentValue):
 			historicLow = float(day['Low'])
 		if historicHigh < float(day['High']):
 			historicHigh = float(day['High']) 
-			
+
 	return (2*currentValue - historicHigh - historicLow)/(historicHigh - historicLow)
 
 
@@ -151,11 +157,35 @@ timePeriod Time period to average
 RETURN (JSON) EMA's for historic period
 """
 def exponentialMovingAverage (historicalJSONData, timePeriod):
-	return -1
+	
+	# Set up initial values and exponential multiplier
+	multiplier = (2.0 / (float(timePeriod)+1.0))
+	emaStart=0.0
+	day=0
+	historicalDataLength = len(historicalJSONData)
+
+	# Obtain the SMA
+	while(day<timePeriod):
+		emaStart+=float(historicalJSONData[day]['Close'])
+		day+=1
+	emaStart= emaStart/float(timePeriod)
+
+	# Create the List of EMA graph points
+	EMAdata = []
+	EMAdata.append(emaStart)
+
+	# Fill the List with each EMA point
+	emaReference = 0
+	while(day<historicalDataLength):
+		EMAdata.append( (float(historicalJSONData[day]['Close']) - EMAdata[emaReference]) * multiplier + EMAdata[emaReference] )
+		day+=1
+		emaReference+=1
+
+	return EMAdata
 
 # Example markets and times
-print ( historicalAnalysisJSON('IBM','Wed, 17 Jun 2015 09:41:15 -0700',90) )
-print ( historicalAnalysisJSON('AAPL','Wed, 1 May 2015 07:41:15 -0500',120) ) 
-print ( historicalAnalysisJSON('MSFT','Mon, 1 Feb 2013 10:41:15 -0500',100) )
-print ( historicalAnalysisJSON('WMT','Wed, 1 May 2015 07:41:15 -0500',45) ) 
+print ( historicalAnalysisJSON('IBM','Wed, 17 Jun 2015 09:41:15 -0700',90,10,10) )
+print ( historicalAnalysisJSON('AAPL','Wed, 1 May 2015 07:41:15 -0500',120,15,15) ) 
+print ( historicalAnalysisJSON('MSFT','Mon, 1 Feb 2013 10:41:15 -0500',100,12,12) )
+print ( historicalAnalysisJSON('WMT','Wed, 1 May 2015 07:41:15 -0500',60,8,8) ) 
 
