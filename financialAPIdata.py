@@ -21,8 +21,10 @@ historicalDate Target date (RFC822 date format)
 timePeriod Number of days to we back at to grab historic data
 RSItimePeriod Time period used for RSI calculation
 EMAtimePeriod Time period used for EMA calculation
+addTrainingData Indicates that we want training data
+profitPercentage Percentage we must earn to make trade worth our time (for training)
 """
-def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod, RSItimePeriod,EMAtimePeriod):
+def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod, RSItimePeriod,EMAtimePeriod,addTrainingData,profitPercentage):
 	
 	# Import date, then convert to datetime format
 	articleTime = datetime.fromtimestamp(email.utils.mktime_tz(email.utils.parsedate_tz(historicalDate)))
@@ -46,6 +48,18 @@ def historicalAnalysisJSON (stockAbbrev,historicalDate, timePeriod, RSItimePerio
 	result['RSI'] = relativeStrengthIndex(JSONStockData,RSItimePeriod)
 	result['OBV'] = onBalanceVolume (JSONStockData)
 	result['EMA'] = exponentialMovingAverage(JSONStockData,10)
+
+	# Add training data if we are looking at a historic date 
+	if(addTrainingData):
+
+		# Submit another Yahoo API query
+		historicFuture = articleTime + relativedelta (days=+timePeriod)
+		JSONFutureData = yahooAPITarget.get_historical(articleTime.strftime("%Y-%m-%d"),historicFuture.strftime("%Y-%m-%d"))
+		
+		# Add to the JSON we have
+		trainingResult = trainingDecision(JSONFutureData,float(JSONStockData[len(JSONStockData)-1]['Close']),profitPercentage)
+		result['Training Gain'] = trainingResult[0]
+		result['Training Decision'] = trainingResult[1]
 
 	return json.dumps(result, indent=4)
 
@@ -74,6 +88,41 @@ def psScore (historicalJSONData, currentValue):
 
 	return (2*currentValue - historicHigh - historicLow)/(historicHigh - historicLow)
 
+"""
+Training Predictor for Neural Network derived by Karl Brown ( thekarlbrown )
+
+Looks into the future period, finds the high/low of that period,
+decides if shorting or buying is better, then sees if gains match our needs
+
+historicalJSONData Historical Data from the Yahoo API in JSON format
+currentValue Current stock value
+percentageGoal How much of a gain we must make for the trade to be worth it
+RETURN List with Percentage Gain and direction (+- float) and Boolean recommendation
+"""
+def trainingDecision(historicalJSONData,currentValue,percentageGoal):
+	historicHigh = 0.0
+	historicLow = 2000000.0
+
+	# Find the high and low over the period obtained
+	for day in historicalJSONData:
+		if historicLow > float(day['Low']):
+			historicLow = float(day['Low'])
+		if historicHigh < float(day['High']):
+			historicHigh = float(day['High']) 
+
+	# Calculate the ideal situation in either direction
+	futureGain = historicHigh - currentValue
+	futureLoss = currentValue - historicLow
+
+	# Calculate potential gains and recommend to act or not
+	result = []
+	if (futureGain >= futureLoss):
+		result.append(futureGain/currentValue)
+		result.append(True) if (result[0]>percentageGoal) else result.append(False)
+		return result
+	result.append(-(futureLoss/currentValue))
+	result.append(True) if ((-result[0])>percentageGoal) else result.append(False)
+	return result
 
 """
 Relative Strength Index (RSI): Momentum indicator measuring speed and change of price
@@ -184,8 +233,8 @@ def exponentialMovingAverage (historicalJSONData, timePeriod):
 	return EMAdata
 
 # Example markets and times
-print ( historicalAnalysisJSON('IBM','Wed, 17 Jun 2015 09:41:15 -0700',90,10,10) )
-print ( historicalAnalysisJSON('AAPL','Wed, 1 May 2015 07:41:15 -0500',120,15,15) ) 
-print ( historicalAnalysisJSON('MSFT','Mon, 1 Feb 2013 10:41:15 -0500',100,12,12) )
-print ( historicalAnalysisJSON('WMT','Wed, 1 May 2015 07:41:15 -0500',60,8,8) ) 
+print ( historicalAnalysisJSON('IBM','Wed, 17 Jun 2015 09:41:15 -0700',90,10,10, False,.1) )
+print ( historicalAnalysisJSON('AAPL','Wed, 1 May 2015 07:41:15 -0500',120,15,15, False,.3) ) 
+print ( historicalAnalysisJSON('MSFT','Mon, 1 Feb 2013 10:41:15 -0500',100,12,12, True,.2) )
+print ( historicalAnalysisJSON('WMT','Wed, 1 May 2015 07:41:15 -0500',50,8,8,True,.05) ) 
 
